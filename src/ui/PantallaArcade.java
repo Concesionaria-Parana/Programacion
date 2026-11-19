@@ -1,11 +1,22 @@
 package ui;
 
+import model.Automovil;
+import model.Camioneta;
+import model.Cliente;
+import model.Motocicleta;
+import model.Vehiculo;
+import service.CatalogoService;
+import service.ConcesionariaService;
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.geom.GeneralPath;
 import java.awt.image.BufferedImage;
+import java.math.BigDecimal;
+import java.sql.SQLException;
+import java.util.List;
 import java.util.Random;
 
 public class PantallaArcade extends JFrame {
@@ -16,15 +27,55 @@ public class PantallaArcade extends JFrame {
     private final JPanel contenedorPrincipal = new JPanel(cardLayout);
     private final TexturePaint texturaFondoArcade;
 
+    private final CatalogoService catalogoService = new CatalogoService();
+    private final ConcesionariaService concesionariaService = new ConcesionariaService();
+
     private boolean parpadeo = true;
     private JTextArea areaChatBot;
     private JTextField campoEntrada;
+
+    private enum EstadoFlujo {
+        MENU_PRINCIPAL,
+        FILTRO_MODELOS_MARCA,
+        FILTRO_MODELOS_TIPO,
+        REG_VEH_TIPO,
+        REG_VEH_VIN,
+        REG_VEH_MODELO,
+        REG_VEH_SUCURSAL,
+        REG_VEH_COLOR,
+        REG_VEH_CONDICION,
+        REG_VEH_TIPO_VEHICULO,
+        REG_VEH_KM,
+        REG_VEH_PRECIO,
+        REG_VEH_EXTRA_1,
+        REG_VEH_EXTRA_2,
+        REG_CLI_TIPO_DOC,
+        REG_CLI_NUM_DOC,
+        REG_CLI_NOMBRE,
+        REG_CLI_DOMICILIO,
+        REG_CLI_TELEFONO,
+        REG_CLI_EMAIL
+    }
+
+    private EstadoFlujo estadoActual = EstadoFlujo.MENU_PRINCIPAL;
+    private Integer tempIdMarcaFiltro;
+    private int tempTipoVehiculoAlta;
+    private String tempVin;
+    private int tempIdModelo;
+    private int tempIdSucursal;
+    private int tempIdColor;
+    private int tempIdCondicion;
+    private int tempIdTipoVehiculo;
+    private int tempKilometraje;
+    private BigDecimal tempPrecioVenta;
+    private String tempExtra1;
+    private Cliente tempCliente;
 
     public PantallaArcade() {
         setTitle("CONCESIONARIA '93 - CAPCOM ARCADE SYSTEM");
         setSize(900, 600);
         setLocationRelativeTo(null);
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE); // Cierra limpio toda la app al cerrar la ventana
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setResizable(false);
 
         this.texturaFondoArcade = crearTextura16BitGranulada();
@@ -43,7 +94,6 @@ public class PantallaArcade extends JFrame {
         });
         timer.start();
 
-        // Atajos de teclado en la pantalla de bienvenida
         panelBienvenido.setFocusable(true);
         panelBienvenido.addKeyListener(new KeyAdapter() {
             @Override
@@ -60,7 +110,35 @@ public class PantallaArcade extends JFrame {
     private void ingresarAlSistema() {
         ConsolaUI.sonidoMonedaMario();
         cardLayout.show(contenedorPrincipal, CARD_SISTEMA);
+        estadoActual = EstadoFlujo.MENU_PRINCIPAL;
+        areaChatBot.setText("[SISTEMA ARCADE OPERATIVO - COIN +100]\n");
+        mostrarMenuAcciones();
         SwingUtilities.invokeLater(() -> campoEntrada.requestFocusInWindow());
+    }
+
+    private void mostrarMenuAcciones() {
+        estadoActual = EstadoFlujo.MENU_PRINCIPAL;
+        areaChatBot.append(
+                "\n=== ACCIONES DISPONIBLES ===\n" +
+                " 1 - Listar sucursales\n" +
+                " 2 - Listar marcas\n" +
+                " 3 - Listar tipos de vehiculo\n" +
+                " 4 - Listar condiciones\n" +
+                " 5 - Listar colores\n" +
+                " 6 - Listar modelos (con filtros opcionales)\n" +
+                " 7 - Listar vehiculos registrados\n" +
+                " 8 - Registrar vehiculo\n" +
+                " 9 - Listar clientes\n" +
+                "10 - Registrar cliente\n" +
+                "11 - Salir\n" +
+                "(Escriba 'menu' en cualquier momento para cancelar y volver aqui)\n" +
+                "Seleccione una opcion (1-11):\n"
+        );
+        desplazarAlFinal();
+    }
+
+    private void desplazarAlFinal() {
+        areaChatBot.setCaretPosition(areaChatBot.getDocument().getLength());
     }
 
     private void salirDelSistema() {
@@ -150,13 +228,11 @@ public class PantallaArcade extends JFrame {
 
             dibujarFondoConMarco(g2, w, h);
 
-            // HUD Superior
             g2.setFont(new Font("Consolas", Font.BOLD, 20));
             dibujarTextoConSombra(g2, "PLAYER 1  000000", 35, 44, new Color(255, 230, 0), Color.BLACK);
             dibujarTextoConSombra(g2, "TOP SCORE  019300", 335, 44, new Color(255, 90, 210), Color.BLACK);
             dibujarTextoConSombra(g2, "UTN - PROG II", 685, 44, Color.WHITE, Color.BLACK);
 
-            // Título "Bienvenido" en cursiva manuscrita
             Font fuenteCursiva = obtenerFuenteCursiva(102);
             g2.setFont(fuenteCursiva);
             String titulo = "Bienvenido";
@@ -178,7 +254,6 @@ public class PantallaArcade extends JFrame {
             g2.setColor(new Color(255, 38, 22));
             g2.drawString(titulo, xTitulo, yTitulo);
 
-            // Subtítulo arcade
             g2.setFont(new Font("Impact", Font.ITALIC, 34));
             String sub = "SISTEMA DE GESTION DE CONCESIONARIA";
             int xSub = (w - g2.getFontMetrics().stringWidth(sub)) / 2;
@@ -192,10 +267,8 @@ public class PantallaArcade extends JFrame {
             g2.fillRect(xSub - 10, ySub + 6, anchoSub, 4);
             g2.fillRect(xSub - 6, ySub + 12, anchoSub, 3);
 
-            // Cadillac clásico
             dibujarCadillac(g2, w / 2 - 150, 255);
 
-            // Pregunta inferior
             g2.setFont(new Font("Consolas", Font.BOLD, 22));
             String pregunta = "¿DESEA INGRESAR AL SISTEMA?";
             int xPreg = (w - g2.getFontMetrics().stringWidth(pregunta)) / 2;
@@ -223,8 +296,8 @@ public class PantallaArcade extends JFrame {
             areaChatBot.setBackground(new Color(14, 24, 18));
             areaChatBot.setForeground(new Color(130, 255, 160));
             areaChatBot.setBorder(BorderFactory.createEmptyBorder(12, 14, 12, 14));
-            areaChatBot.setText("[SISTEMA ARCADE OPERATIVO - COIN +100]\n" +
-                    "Esperando instrucciones de contenido y flujo para esta pantalla...\n");
+            areaChatBot.setText("[SISTEMA ARCADE OPERATIVO - COIN +100]\n");
+            mostrarMenuAcciones();
 
             JScrollPane scroll = new JScrollPane(areaChatBot);
             scroll.setBounds(40, 75, 815, 385);
@@ -258,10 +331,264 @@ public class PantallaArcade extends JFrame {
         private void procesarEntradaUsuario() {
             String texto = campoEntrada.getText().trim();
             if (texto.isEmpty()) return;
+
             areaChatBot.append("\nPLAYER 1 > " + texto + "\n");
             campoEntrada.setText("");
+
             if (texto.equalsIgnoreCase("salir") || texto.equalsIgnoreCase("exit")) {
                 salirDelSistema();
+                return;
+            }
+
+            if (texto.equalsIgnoreCase("menu") || texto.equalsIgnoreCase("ayuda") || texto.equals("0")) {
+                mostrarMenuAcciones();
+                return;
+            }
+
+            try {
+                switch (estadoActual) {
+                    case MENU_PRINCIPAL:
+                        ejecutarOpcionMenu(texto);
+                        break;
+                    case FILTRO_MODELOS_MARCA:
+                        tempIdMarcaFiltro = parsearEnteroOpcional(texto);
+                        estadoActual = EstadoFlujo.FILTRO_MODELOS_TIPO;
+                        areaChatBot.append("Ingrese ID de tipo de vehiculo para filtrar (o Enter/0 para todos):\n");
+                        break;
+                    case FILTRO_MODELOS_TIPO:
+                        Integer idTipoFiltro = parsearEnteroOpcional(texto);
+                        imprimirFilas(catalogoService.listarModelos(tempIdMarcaFiltro, idTipoFiltro), "MODELOS");
+                        mostrarMenuAcciones();
+                        break;
+                    case REG_VEH_TIPO:
+                        tempTipoVehiculoAlta = Integer.parseInt(texto);
+                        if (tempTipoVehiculoAlta < 1 || tempTipoVehiculoAlta > 3) {
+                            areaChatBot.append("Opcion invalida. Ingrese 1 (Automovil), 2 (Camioneta) o 3 (Motocicleta):\n");
+                            return;
+                        }
+                        estadoActual = EstadoFlujo.REG_VEH_VIN;
+                        areaChatBot.append("Ingrese VIN:\n");
+                        break;
+                    case REG_VEH_VIN:
+                        tempVin = texto;
+                        estadoActual = EstadoFlujo.REG_VEH_MODELO;
+                        areaChatBot.append("Ingrese ID de modelo:\n");
+                        break;
+                    case REG_VEH_MODELO:
+                        tempIdModelo = Integer.parseInt(texto);
+                        estadoActual = EstadoFlujo.REG_VEH_SUCURSAL;
+                        areaChatBot.append("Ingrese ID de sucursal:\n");
+                        break;
+                    case REG_VEH_SUCURSAL:
+                        tempIdSucursal = Integer.parseInt(texto);
+                        estadoActual = EstadoFlujo.REG_VEH_COLOR;
+                        areaChatBot.append("Ingrese ID de color:\n");
+                        break;
+                    case REG_VEH_COLOR:
+                        tempIdColor = Integer.parseInt(texto);
+                        estadoActual = EstadoFlujo.REG_VEH_CONDICION;
+                        areaChatBot.append("Ingrese ID de condicion:\n");
+                        break;
+                    case REG_VEH_CONDICION:
+                        tempIdCondicion = Integer.parseInt(texto);
+                        estadoActual = EstadoFlujo.REG_VEH_TIPO_VEHICULO;
+                        areaChatBot.append("Ingrese ID de tipo de vehiculo:\n");
+                        break;
+                    case REG_VEH_TIPO_VEHICULO:
+                        tempIdTipoVehiculo = Integer.parseInt(texto);
+                        estadoActual = EstadoFlujo.REG_VEH_KM;
+                        areaChatBot.append("Ingrese kilometraje:\n");
+                        break;
+                    case REG_VEH_KM:
+                        tempKilometraje = Integer.parseInt(texto);
+                        estadoActual = EstadoFlujo.REG_VEH_PRECIO;
+                        areaChatBot.append("Ingrese precio de venta (ej: 15000000.00):\n");
+                        break;
+                    case REG_VEH_PRECIO:
+                        tempPrecioVenta = new BigDecimal(texto);
+                        estadoActual = EstadoFlujo.REG_VEH_EXTRA_1;
+                        if (tempTipoVehiculoAlta == 1) {
+                            areaChatBot.append("Ingrese carroceria del automovil:\n");
+                        } else if (tempTipoVehiculoAlta == 2) {
+                            areaChatBot.append("Ingrese carroceria de la camioneta:\n");
+                        } else {
+                            areaChatBot.append("Ingrese tipo de motocicleta:\n");
+                        }
+                        break;
+                    case REG_VEH_EXTRA_1:
+                        tempExtra1 = texto;
+                        estadoActual = EstadoFlujo.REG_VEH_EXTRA_2;
+                        if (tempTipoVehiculoAlta == 1) {
+                            areaChatBot.append("Ingrese cantidad de puertas:\n");
+                        } else if (tempTipoVehiculoAlta == 2) {
+                            areaChatBot.append("Ingrese traccion (ej: 4x4, 4x2):\n");
+                        } else {
+                            areaChatBot.append("Ingrese cilindrada (numero entero):\n");
+                        }
+                        break;
+                    case REG_VEH_EXTRA_2:
+                        Vehiculo nuevoVehiculo = construirVehiculoConExtra(texto);
+                        int idVehGenerado = concesionariaService.registrarVehiculo(nuevoVehiculo);
+                        areaChatBot.append("Vehiculo registrado con ID: " + idVehGenerado + "\n");
+                        mostrarMenuAcciones();
+                        break;
+                    case REG_CLI_TIPO_DOC:
+                        tempCliente = new Cliente();
+                        tempCliente.setTipoDocumento(texto);
+                        estadoActual = EstadoFlujo.REG_CLI_NUM_DOC;
+                        areaChatBot.append("Ingrese numero de documento:\n");
+                        break;
+                    case REG_CLI_NUM_DOC:
+                        tempCliente.setNumeroDocumento(texto);
+                        estadoActual = EstadoFlujo.REG_CLI_NOMBRE;
+                        areaChatBot.append("Ingrese nombre completo:\n");
+                        break;
+                    case REG_CLI_NOMBRE:
+                        tempCliente.setNombreCompleto(texto);
+                        estadoActual = EstadoFlujo.REG_CLI_DOMICILIO;
+                        areaChatBot.append("Ingrese domicilio:\n");
+                        break;
+                    case REG_CLI_DOMICILIO:
+                        tempCliente.setDomicilio(texto);
+                        estadoActual = EstadoFlujo.REG_CLI_TELEFONO;
+                        areaChatBot.append("Ingrese telefono:\n");
+                        break;
+                    case REG_CLI_TELEFONO:
+                        tempCliente.setTelefono(texto);
+                        estadoActual = EstadoFlujo.REG_CLI_EMAIL;
+                        areaChatBot.append("Ingrese email:\n");
+                        break;
+                    case REG_CLI_EMAIL:
+                        tempCliente.setEmail(texto);
+                        int idCliGenerado = concesionariaService.registrarCliente(tempCliente);
+                        areaChatBot.append("Cliente registrado con ID: " + idCliGenerado + "\n");
+                        tempCliente = null;
+                        mostrarMenuAcciones();
+                        break;
+                    default:
+                        mostrarMenuAcciones();
+                        break;
+                }
+            } catch (NumberFormatException ex) {
+                areaChatBot.append("Entrada numerica invalida. Intente nuevamente o escriba 'menu'.\n");
+            } catch (SQLException ex) {
+                areaChatBot.append("Error de base de datos: " + ex.getMessage() + "\n");
+                mostrarMenuAcciones();
+            }
+            desplazarAlFinal();
+        }
+
+        private void ejecutarOpcionMenu(String opcion) throws SQLException {
+            switch (opcion) {
+                case "1":
+                    imprimirFilas(catalogoService.listarSucursales(), "SUCURSALES");
+                    mostrarMenuAcciones();
+                    break;
+                case "2":
+                    imprimirFilas(catalogoService.listarMarcas(), "MARCAS");
+                    mostrarMenuAcciones();
+                    break;
+                case "3":
+                    imprimirFilas(catalogoService.listarTiposVehiculo(), "TIPOS DE VEHICULO");
+                    mostrarMenuAcciones();
+                    break;
+                case "4":
+                    imprimirFilas(catalogoService.listarCondiciones(), "CONDICIONES");
+                    mostrarMenuAcciones();
+                    break;
+                case "5":
+                    imprimirFilas(catalogoService.listarColores(), "COLORES");
+                    mostrarMenuAcciones();
+                    break;
+                case "6":
+                    tempIdMarcaFiltro = null;
+                    estadoActual = EstadoFlujo.FILTRO_MODELOS_MARCA;
+                    areaChatBot.append("Ingrese ID de marca para filtrar (o 0 para todas):\n");
+                    break;
+                case "7":
+                    List<Vehiculo> vehiculos = concesionariaService.listarVehiculos();
+                    areaChatBot.append("--- VEHICULOS (" + vehiculos.size() + ") ---\n");
+                    for (Vehiculo v : vehiculos) {
+                        areaChatBot.append("ID " + v.getIdVehiculo() + " | VIN: " + v.getVin() +
+                                " | Precio: " + v.getPrecioVenta() + " | KM: " + v.getKilometraje() + "\n");
+                    }
+                    mostrarMenuAcciones();
+                    break;
+                case "8":
+                    estadoActual = EstadoFlujo.REG_VEH_TIPO;
+                    areaChatBot.append("Tipo de vehiculo a registrar: 1=Automovil, 2=Camioneta, 3=Motocicleta\n");
+                    break;
+                case "9":
+                    List<Cliente> clientes = concesionariaService.listarClientes();
+                    areaChatBot.append("--- CLIENTES (" + clientes.size() + ") ---\n");
+                    for (Cliente c : clientes) {
+                        areaChatBot.append("ID " + c.getIdCliente() + " | " + c.getNombreCompleto() +
+                                " | Doc: " + c.getTipoDocumento() + " " + c.getNumeroDocumento() + "\n");
+                    }
+                    mostrarMenuAcciones();
+                    break;
+                case "10":
+                    estadoActual = EstadoFlujo.REG_CLI_TIPO_DOC;
+                    areaChatBot.append("Ingrese tipo de documento del cliente (ej: DNI):\n");
+                    break;
+                case "11":
+                    salirDelSistema();
+                    break;
+                default:
+                    areaChatBot.append("Opcion no reconocida.\n");
+                    mostrarMenuAcciones();
+                    break;
+            }
+        }
+
+        private Integer parsearEnteroOpcional(String texto) {
+            if (texto.isEmpty() || texto.equals("0")) {
+                return null;
+            }
+            return Integer.parseInt(texto);
+        }
+
+        private Vehiculo construirVehiculoConExtra(String extra2) {
+            if (tempTipoVehiculoAlta == 1) {
+                Automovil auto = new Automovil();
+                configurarBaseVehiculo(auto);
+                auto.setCarroceria(tempExtra1);
+                auto.setCantidadPuertas(Integer.parseInt(extra2));
+                return auto;
+            } else if (tempTipoVehiculoAlta == 2) {
+                Camioneta cam = new Camioneta();
+                configurarBaseVehiculo(cam);
+                cam.setCarroceria(tempExtra1);
+                cam.setTraccion(extra2);
+                return cam;
+            } else {
+                Motocicleta moto = new Motocicleta();
+                configurarBaseVehiculo(moto);
+                moto.setTipoMotocicleta(tempExtra1);
+                moto.setCilindrada(Integer.parseInt(extra2));
+                return moto;
+            }
+        }
+
+        private void configurarBaseVehiculo(Vehiculo v) {
+            v.setVin(tempVin);
+            v.setIdModelo(tempIdModelo);
+            v.setIdSucursal(tempIdSucursal);
+            v.setIdColor(tempIdColor);
+            v.setIdCondicion(tempIdCondicion);
+            v.setIdTipoVehiculo(tempIdTipoVehiculo);
+            v.setKilometraje(tempKilometraje);
+            v.setPrecioVenta(tempPrecioVenta);
+        }
+
+        private void imprimirFilas(List<?> filas, String titulo) {
+            areaChatBot.append("--- " + titulo + " (" + filas.size() + ") ---\n");
+            if (filas.isEmpty()) {
+                areaChatBot.append("(Sin registros)\n");
+                return;
+            }
+            for (Object fila : filas) {
+                areaChatBot.append(fila + "\n");
             }
         }
 
